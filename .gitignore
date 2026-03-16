@@ -49,3 +49,6 @@ coverage
 .cache
 tmp
 temp
+
+# btca local data
+.btca/

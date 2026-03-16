@@ -1,0 +1,20 @@
+{
+  "$schema": "https://btca.dev/btca.schema.json",
+  "dataDirectory": ".btca",
+  "resources": [
+    {
+      "type": "git",
+      "name": "mediasoup",
+      "url": "https://github.com/versatica/mediasoup",
+      "branch": "main"
+    },
+    {
+      "type": "git",
+      "name": "oRPC",
+      "url": "https://github.com/middleapi/orpc",
+      "branch": "main"
+    }
+  ],
+  "model": "claude-haiku-4-5",
+  "provider": "anthropic"
+}
