@@ -13,6 +13,7 @@
   "dependencies": {
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
+    "@orpc/experimental-publisher": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "@poc-bun-orpc-mediasoup/env": "workspace:*",
@@ -21,7 +22,6 @@
   },
   "devDependencies": {
     "@poc-bun-orpc-mediasoup/config": "workspace:*",
-    "hono": "catalog:",
     "typescript": "^5"
   }
 }

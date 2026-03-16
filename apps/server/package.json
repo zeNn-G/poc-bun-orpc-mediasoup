@@ -10,13 +10,15 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
+    "@orpc/experimental-pino": "^1.13.7",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "@poc-bun-orpc-mediasoup/api": "workspace:*",
     "@poc-bun-orpc-mediasoup/env": "workspace:*",
     "dotenv": "catalog:",
-    "hono": "catalog:",
+    "pino": "^10.3.1",
+    "pino-pretty": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

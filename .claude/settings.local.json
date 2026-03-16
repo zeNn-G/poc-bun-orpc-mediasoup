@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__btca-local__listResources",
+      "mcp__btca-local__ask",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(bun run:*)",
+      "Bash(bun install:*)"
+    ]
+  }
+}
