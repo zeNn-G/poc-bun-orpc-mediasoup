@@ -1,0 +1,3 @@
+{
+  "extends": "@poc-bun-orpc-mediasoup/config/tsconfig.base.json"
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-lyra",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@poc-bun-orpc-mediasoup/ui/components",
+    "utils": "@poc-bun-orpc-mediasoup/ui/lib/utils",
+    "hooks": "@poc-bun-orpc-mediasoup/ui/hooks",
+    "lib": "@poc-bun-orpc-mediasoup/ui/lib",
+    "ui": "@poc-bun-orpc-mediasoup/ui/components"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}
