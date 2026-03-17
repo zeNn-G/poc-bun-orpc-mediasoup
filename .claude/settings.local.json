@@ -12,7 +12,12 @@
       "Bash(bun -e \":*)",
       "Bash(npx tsc:*)",
       "Bash(bunx tsc:*)",
-      "Bash(docker-compose down:*)"
+      "Bash(docker-compose down:*)",
+      "WebFetch(domain:api.github.com)",
+      "mcp__grep__searchGitHub",
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

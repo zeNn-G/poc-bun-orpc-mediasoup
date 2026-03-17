@@ -3,3 +3,14 @@ node_modules
 .git
 dist
 **/dist
+.turbo
+**/.turbo
+.claude
+*.md
+.env
+.env.*
+
+# Web app source not needed in server image (package.json kept for workspace resolution)
+apps/web/src
+apps/web/public
+apps/web/node_modules

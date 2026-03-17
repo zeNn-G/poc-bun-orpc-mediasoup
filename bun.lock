@@ -136,6 +136,9 @@
       },
     },
   },
+  "trustedDependencies": [
+    "mediasoup",
+  ],
   "catalog": {
     "@orpc/client": "^1.12.2",
     "@orpc/experimental-pino": "^1.12.2",

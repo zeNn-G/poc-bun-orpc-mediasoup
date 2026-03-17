@@ -10,3 +10,13 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=127.0.0.1
       - MEDIASOUP_RTC_MIN_PORT=10000
       - MEDIASOUP_RTC_MAX_PORT=10100
+    # On Linux: uncomment for better perf (skip port mapping)
+    # network_mode: host
+
+  # --- TURN server (uncomment for production) ---
+  # coturn:
+  #   image: coturn/coturn:latest
+  #   network_mode: host
+  #   volumes:
+  #     - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+  #   restart: unless-stopped

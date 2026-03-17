@@ -1,5 +1,6 @@
 import type * as mediasoup from "mediasoup";
 import { env } from "@poc-bun-orpc-mediasoup/env/server";
+import { patchSpawnForMediasoup, restoreSpawn } from "./bun-mediasoup-workaround";
 
 let worker: mediasoup.types.Worker | null = null;
 const routers = new Map<string, mediasoup.types.Router>();
@@ -25,11 +26,16 @@ export async function initWorker(): Promise<mediasoup.types.Worker> {
   if (worker) return worker;
 
   const ms = await import("mediasoup");
-  worker = await ms.createWorker({
-    logLevel: "warn",
-    rtcMinPort: env.MEDIASOUP_RTC_MIN_PORT,
-    rtcMaxPort: env.MEDIASOUP_RTC_MAX_PORT,
-  });
+  try {
+    patchSpawnForMediasoup();
+    worker = await ms.createWorker({
+      logLevel: "warn",
+      rtcMinPort: env.MEDIASOUP_RTC_MIN_PORT,
+      rtcMaxPort: env.MEDIASOUP_RTC_MAX_PORT,
+    });
+  } finally {
+    restoreSpawn();
+  }
 
   worker.on("died", () => {
     console.error("mediasoup Worker died, exiting...");
