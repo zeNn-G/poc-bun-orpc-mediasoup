@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { publicProcedure } from "../index";
+import { mediaRouter } from "./media";
 
 export const wsRouter = {
   echo: publicProcedure
@@ -11,6 +12,8 @@ export const wsRouter = {
   ping: publicProcedure.handler(() => {
     return { pong: true, ts: Date.now() };
   }),
+
+  media: mediaRouter,
 };
 
 export type WsRouter = typeof wsRouter;

@@ -8,7 +8,11 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(bun run:*)",
-      "Bash(bun install:*)"
+      "Bash(bun install:*)",
+      "Bash(bun -e \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(docker-compose down:*)"
     ]
   }
 }

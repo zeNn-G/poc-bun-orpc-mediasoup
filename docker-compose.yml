@@ -1,0 +1,12 @@
+services:
+  server:
+    build: .
+    ports:
+      - "3000:3000"
+      - "10000-10100:10000-10100/udp"
+      - "10000-10100:10000-10100/tcp"
+    environment:
+      - CORS_ORIGIN=http://localhost:3001
+      - MEDIASOUP_ANNOUNCED_IP=127.0.0.1
+      - MEDIASOUP_RTC_MIN_PORT=10000
+      - MEDIASOUP_RTC_MAX_PORT=10100

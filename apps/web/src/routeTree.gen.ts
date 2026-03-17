@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WsPlaygroundRouteImport } from './routes/ws-playground'
+import { Route as MediaPlaygroundRouteImport } from './routes/media-playground'
 import { Route as IndexRouteImport } from './routes/index'
 
 const WsPlaygroundRoute = WsPlaygroundRouteImport.update({
   id: '/ws-playground',
   path: '/ws-playground',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MediaPlaygroundRoute = MediaPlaygroundRouteImport.update({
+  id: '/media-playground',
+  path: '/media-playground',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/media-playground': typeof MediaPlaygroundRoute
   '/ws-playground': typeof WsPlaygroundRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/media-playground': typeof MediaPlaygroundRoute
   '/ws-playground': typeof WsPlaygroundRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/media-playground': typeof MediaPlaygroundRoute
   '/ws-playground': typeof WsPlaygroundRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ws-playground'
+  fullPaths: '/' | '/media-playground' | '/ws-playground'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ws-playground'
-  id: '__root__' | '/' | '/ws-playground'
+  to: '/' | '/media-playground' | '/ws-playground'
+  id: '__root__' | '/' | '/media-playground' | '/ws-playground'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MediaPlaygroundRoute: typeof MediaPlaygroundRoute
   WsPlaygroundRoute: typeof WsPlaygroundRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/ws-playground'
       fullPath: '/ws-playground'
       preLoaderRoute: typeof WsPlaygroundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/media-playground': {
+      id: '/media-playground'
+      path: '/media-playground'
+      fullPath: '/media-playground'
+      preLoaderRoute: typeof MediaPlaygroundRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MediaPlaygroundRoute: MediaPlaygroundRoute,
   WsPlaygroundRoute: WsPlaygroundRoute,
 }
 export const routeTree = rootRouteImport

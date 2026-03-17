@@ -9,6 +9,13 @@ import { wsRouter } from "@poc-bun-orpc-mediasoup/api/routers/ws";
 import { CORSPlugin } from "@orpc/server/plugins";
 import { serve } from "bun";
 import pino from "pino";
+import {
+  unregisterConnection,
+  removePeerMedia,
+  cleanupMediaRoom,
+} from "@poc-bun-orpc-mediasoup/api/lib/media-store";
+import { deleteRouter } from "@poc-bun-orpc-mediasoup/api/lib/mediasoup-worker";
+import { publisher } from "@poc-bun-orpc-mediasoup/api/lib/room-store";
 
 const logger = pino({
   transport: {
@@ -84,7 +91,7 @@ const server = serve({
       return new Response("Not found", { status: 404 });
     },
     "/ws/rpc": (req, server) => {
-      if (server.upgrade(req)) {
+      if (server.upgrade(req, { data: { connectionId: crypto.randomUUID() } })) {
         return new Response("Upgrade successful");
       }
 
@@ -92,19 +99,51 @@ const server = serve({
     },
   },
   websocket: {
-    open(_ws) {
-      logger.info("[ws] peer connected");
+    data: {} as { connectionId: string },
+    open(ws) {
+      logger.info({ connectionId: ws.data.connectionId }, "[ws] peer connected");
     },
     message(ws, message) {
       wsHandler.message(ws, message, {
-        context: { session: null },
+        context: { session: null, connectionId: ws.data.connectionId },
       });
     },
-    close(ws, code, reason) {
-      logger.info({ code, reason }, "[ws] peer disconnected");
+    async close(ws, code, reason) {
+      const { connectionId } = ws.data;
+      logger.info({ code, reason, connectionId }, "[ws] peer disconnected");
       wsHandler.close(ws);
+
+      // Media cleanup on disconnect
+      if (connectionId) {
+        const info = unregisterConnection(connectionId);
+        if (info) {
+          const peer = removePeerMedia(info.roomId, info.peerId);
+          if (peer) {
+            // Notify about closed producers
+            for (const producer of peer.producers.values()) {
+              await publisher.publish(`room:${info.roomId}`, {
+                type: "media:producerClosed",
+                roomId: info.roomId,
+                peerId: info.peerId,
+                producerId: producer.id,
+                ts: Date.now(),
+              });
+            }
+            await publisher.publish(`room:${info.roomId}`, {
+              type: "media:peerLeftCall",
+              roomId: info.roomId,
+              peerId: info.peerId,
+              ts: Date.now(),
+            });
+          }
+          if (cleanupMediaRoom(info.roomId)) {
+            deleteRouter(info.roomId);
+          }
+        }
+      }
     },
   },
+  idleTimeout: 255, // max value — prevents SSE connections from being killed
   development: process.env.NODE_ENV !== "production" && {
     hmr: true,
     console: true,

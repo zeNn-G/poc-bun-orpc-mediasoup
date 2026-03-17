@@ -34,6 +34,34 @@ export const RoomEventSchema = z.discriminatedUnion("type", [
     user: z.string(),
     ts: z.number(),
   }),
+  z.object({
+    type: z.literal("media:peerJoinedCall"),
+    roomId: z.string(),
+    peerId: z.string(),
+    ts: z.number(),
+  }),
+  z.object({
+    type: z.literal("media:peerLeftCall"),
+    roomId: z.string(),
+    peerId: z.string(),
+    ts: z.number(),
+  }),
+  z.object({
+    type: z.literal("media:newProducer"),
+    roomId: z.string(),
+    peerId: z.string(),
+    producerId: z.string(),
+    kind: z.string(),
+    appData: z.record(z.string(), z.any()).optional(),
+    ts: z.number(),
+  }),
+  z.object({
+    type: z.literal("media:producerClosed"),
+    roomId: z.string(),
+    peerId: z.string(),
+    producerId: z.string(),
+    ts: z.number(),
+  }),
 ]);
 
 export type RoomEvent = z.infer<typeof RoomEventSchema>;

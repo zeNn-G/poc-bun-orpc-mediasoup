@@ -18,6 +18,7 @@
     "@orpc/zod": "catalog:",
     "@poc-bun-orpc-mediasoup/env": "workspace:*",
     "dotenv": "catalog:",
+    "mediasoup": "^3.14",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -14,7 +14,11 @@ export const Route = createFileRoute("/ws-playground")({
 type RoomEvent =
   | { type: "message"; roomId: string; user: string; text: string; ts: number }
   | { type: "joined"; roomId: string; user: string; ts: number }
-  | { type: "left"; roomId: string; user: string; ts: number };
+  | { type: "left"; roomId: string; user: string; ts: number }
+  | { type: "media:peerJoinedCall"; roomId: string; peerId: string; ts: number }
+  | { type: "media:peerLeftCall"; roomId: string; peerId: string; ts: number }
+  | { type: "media:newProducer"; roomId: string; peerId: string; producerId: string; kind: string; ts: number }
+  | { type: "media:producerClosed"; roomId: string; peerId: string; producerId: string; ts: number };
 
 function WsPlaygroundComponent() {
   const [username, setUsername] = useState("");
@@ -85,17 +89,16 @@ function RoomCard({ username }: { username: string }) {
 
   // Accumulate events from live query
   useEffect(() => {
-    if (liveQuery.data) {
-      setEvents((prev) => [...prev, liveQuery.data!]);
+    const event = liveQuery.data;
+    if (event) {
+      setEvents((prev) => [...prev, event]);
 
-      if (liveQuery.data.type === "joined") {
+      if (event.type === "joined") {
         setMembers((prev) =>
-          prev.includes(liveQuery.data!.user)
-            ? prev
-            : [...prev, liveQuery.data!.user],
+          prev.includes(event.user) ? prev : [...prev, event.user],
         );
-      } else if (liveQuery.data.type === "left") {
-        setMembers((prev) => prev.filter((m) => m !== liveQuery.data!.user));
+      } else if (event.type === "left") {
+        setMembers((prev) => prev.filter((m) => m !== event.user));
       }
     }
   }, [liveQuery.data]);
@@ -210,10 +213,14 @@ function RoomCard({ username }: { username: string }) {
                     <span className="font-semibold">{event.user}</span>:{" "}
                     {event.text}
                   </>
-                ) : (
+                ) : event.type === "joined" || event.type === "left" ? (
                   <span className="text-muted-foreground italic">
                     {event.user} {event.type === "joined" ? "joined" : "left"}{" "}
                     the room
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    [media event: {event.type}]
                   </span>
                 )}
               </div>
