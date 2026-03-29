@@ -24,14 +24,17 @@ function ParticipantRow({
   peerId,
   isLocal,
   isSpeaking,
+  isLocalMuted,
+  mutedPeers,
   volumeSettings,
 }: {
   peerId: string;
   isLocal: boolean;
   isSpeaking: boolean;
+  isLocalMuted: boolean;
+  mutedPeers: Set<string>;
   volumeSettings: VolumeSettings;
 }) {
-  const settings = volumeSettings.getSettings(peerId);
   const avatarColor = getAvatarColor(peerId);
 
   const row = (
@@ -55,7 +58,13 @@ function ParticipantRow({
 
       {/* Mic indicator */}
       <div className="shrink-0 text-muted-foreground">
-        {!isLocal && settings.muted ? (
+        {isLocal ? (
+          isLocalMuted ? (
+            <MicOff className="h-3.5 w-3.5 text-red-400/70" />
+          ) : (
+            <Mic className="h-3.5 w-3.5" />
+          )
+        ) : mutedPeers.has(peerId) ? (
           <MicOff className="h-3.5 w-3.5 text-red-400/70" />
         ) : (
           <Mic className="h-3.5 w-3.5" />
@@ -78,12 +87,16 @@ export function ParticipantsSidebar({
   remoteStreams,
   isInCall,
   speakingPeers,
+  mutedPeers,
+  isLocalMuted,
   volumeSettings,
 }: {
   localPeerId: string;
   remoteStreams: RemoteStream[];
   isInCall: boolean;
   speakingPeers: Set<string>;
+  mutedPeers: Set<string>;
+  isLocalMuted: boolean;
   volumeSettings: VolumeSettings;
 }) {
   // Derive call participants from remote streams + local user
@@ -116,6 +129,8 @@ export function ParticipantsSidebar({
             peerId={m}
             isLocal={m === localPeerId}
             isSpeaking={speakingPeers.has(m)}
+            isLocalMuted={isLocalMuted}
+            mutedPeers={mutedPeers}
             volumeSettings={volumeSettings}
           />
         ))}

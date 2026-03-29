@@ -18,7 +18,10 @@ type RoomEvent =
   | { type: "media:peerJoinedCall"; roomId: string; peerId: string; ts: number }
   | { type: "media:peerLeftCall"; roomId: string; peerId: string; ts: number }
   | { type: "media:newProducer"; roomId: string; peerId: string; producerId: string; kind: string; ts: number }
-  | { type: "media:producerClosed"; roomId: string; peerId: string; producerId: string; ts: number };
+  | { type: "media:producerClosed"; roomId: string; peerId: string; producerId: string; ts: number }
+  | { type: "media:audioLevels"; roomId: string; levels: Array<{ peerId: string; volume: number }>; ts: number }
+  | { type: "media:producerPaused"; roomId: string; peerId: string; producerId: string; kind: string; ts: number }
+  | { type: "media:producerResumed"; roomId: string; peerId: string; producerId: string; kind: string; ts: number };
 
 function WsPlaygroundComponent() {
   const [username, setUsername] = useState("");

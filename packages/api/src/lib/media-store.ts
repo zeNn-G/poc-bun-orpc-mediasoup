@@ -86,6 +86,18 @@ export function cleanupMediaRoom(roomId: string): boolean {
   return false;
 }
 
+export function findPeerIdByProducerId(roomId: string, producerId: string): string | null {
+  const room = mediaRooms.get(roomId);
+  if (!room) return null;
+
+  for (const peer of room.peers.values()) {
+    if (peer.producers.has(producerId)) {
+      return peer.peerId;
+    }
+  }
+  return null;
+}
+
 export function registerConnection(connectionId: string, roomId: string, peerId: string): void {
   connectionToPeer.set(connectionId, { roomId, peerId });
 }

@@ -11,7 +11,7 @@ import { MediaControls } from "@/components/media-controls";
 import { ScreenShareDialog } from "@/components/screen-share-dialog";
 import { ParticipantsSidebar } from "@/components/participants-sidebar";
 import { useVolumeSettings } from "@/hooks/use-volume-settings";
-import { useSpeakingDetection } from "@/hooks/use-speaking-detection";
+import { useLocalSpeakingDetection } from "@/hooks/use-speaking-detection";
 import {
   Hash,
   Users,
@@ -34,7 +34,10 @@ type RoomEvent =
   | { type: "media:peerJoinedCall"; roomId: string; peerId: string; ts: number }
   | { type: "media:peerLeftCall"; roomId: string; peerId: string; ts: number }
   | { type: "media:newProducer"; roomId: string; peerId: string; producerId: string; kind: string; appData?: Record<string, unknown>; ts: number }
-  | { type: "media:producerClosed"; roomId: string; peerId: string; producerId: string; ts: number };
+  | { type: "media:producerClosed"; roomId: string; peerId: string; producerId: string; ts: number }
+  | { type: "media:audioLevels"; roomId: string; levels: Array<{ peerId: string; volume: number }>; ts: number }
+  | { type: "media:producerPaused"; roomId: string; peerId: string; producerId: string; kind: string; ts: number }
+  | { type: "media:producerResumed"; roomId: string; peerId: string; producerId: string; kind: string; ts: number };
 
 function MediaPlaygroundComponent() {
   const [username, setUsername] = useState("");
@@ -104,24 +107,16 @@ function RoomView({
 
   const media = useMediaSession(wsConnected ? wsClient : null, roomId, username);
 
-  // Build audio tracks for speaking detection (remote audio + local mic)
-  const audioTracksForDetection = useMemo(() => {
-    const tracks: Array<{ peerId: string; track: MediaStreamTrack }> = [];
-    // Remote mic audio only (exclude screen share audio)
-    for (const s of media.remoteStreams) {
-      if (s.kind === "audio" && !s.appData?.screen) {
-        tracks.push({ peerId: s.peerId, track: s.track });
-      }
-    }
-    // Local mic (only when enabled)
-    const localAudioTrack = media.localStream?.getAudioTracks()[0];
-    if (localAudioTrack && media.audioEnabled) {
-      tracks.push({ peerId: username, track: localAudioTrack });
-    }
-    return tracks;
-  }, [media.remoteStreams, media.localStream, media.audioEnabled, username]);
+  // Local speaking detection for instant self-indicator
+  const localAudioTrack = media.audioEnabled ? media.localStream?.getAudioTracks()[0] ?? null : null;
+  const localSpeaking = useLocalSpeakingDetection(localAudioTrack, username);
 
-  const speakingPeers = useSpeakingDetection(audioTracksForDetection);
+  // Merge local + server speaking peers
+  const speakingPeers = useMemo(() => {
+    const merged = new Set(media.speakingPeers);
+    for (const id of localSpeaking) merged.add(id);
+    return merged;
+  }, [media.speakingPeers, localSpeaking]);
 
   const liveQuery = useQuery(
     orpc.room.live.experimental_liveOptions({
@@ -273,6 +268,8 @@ function RoomView({
             remoteStreams={media.remoteStreams}
             isInCall={media.isInCall}
             speakingPeers={speakingPeers}
+            mutedPeers={media.mutedPeers}
+            isLocalMuted={!media.audioEnabled}
             volumeSettings={volumeSettings}
           />
           <div className="flex-1">

@@ -3,7 +3,13 @@ import { env } from "@poc-bun-orpc-mediasoup/env/server";
 import { patchSpawnForMediasoup, restoreSpawn } from "./bun-mediasoup-workaround";
 
 let worker: mediasoup.types.Worker | null = null;
-const routers = new Map<string, mediasoup.types.Router>();
+
+interface RouterEntry {
+  router: mediasoup.types.Router;
+  audioLevelObserver: mediasoup.types.AudioLevelObserver;
+}
+
+const routers = new Map<string, RouterEntry>();
 
 // preferredPayloadType is optional for mediaCodecs per mediasoup docs
 const mediaCodecs: mediasoup.types.RtpCodecCapability[] = [
@@ -46,20 +52,36 @@ export async function initWorker(): Promise<mediasoup.types.Worker> {
   return worker;
 }
 
-export async function getOrCreateRouter(roomId: string): Promise<mediasoup.types.Router> {
-  let router = routers.get(roomId);
-  if (router) return router;
+export async function getOrCreateRouter(
+  roomId: string,
+): Promise<{ router: mediasoup.types.Router; audioLevelObserver: mediasoup.types.AudioLevelObserver }> {
+  const existing = routers.get(roomId);
+  if (existing) return existing;
 
   const w = await initWorker();
-  router = await w.createRouter({ mediaCodecs });
-  routers.set(roomId, router);
-  return router;
+  const router = await w.createRouter({ mediaCodecs });
+  const audioLevelObserver = await router.createAudioLevelObserver({
+    maxEntries: 10,
+    threshold: -50,
+    interval: 800,
+  });
+
+  const entry: RouterEntry = { router, audioLevelObserver };
+  routers.set(roomId, entry);
+  return entry;
+}
+
+export function getAudioLevelObserver(
+  roomId: string,
+): mediasoup.types.AudioLevelObserver | undefined {
+  return routers.get(roomId)?.audioLevelObserver;
 }
 
 export function deleteRouter(roomId: string): void {
-  const router = routers.get(roomId);
-  if (router) {
-    router.close();
+  const entry = routers.get(roomId);
+  if (entry) {
+    entry.audioLevelObserver.close();
+    entry.router.close();
     routers.delete(roomId);
   }
 }

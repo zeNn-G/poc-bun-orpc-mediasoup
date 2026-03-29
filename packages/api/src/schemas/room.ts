@@ -62,6 +62,33 @@ export const RoomEventSchema = z.discriminatedUnion("type", [
     producerId: z.string(),
     ts: z.number(),
   }),
+  z.object({
+    type: z.literal("media:audioLevels"),
+    roomId: z.string(),
+    levels: z.array(
+      z.object({
+        peerId: z.string(),
+        volume: z.number(),
+      }),
+    ),
+    ts: z.number(),
+  }),
+  z.object({
+    type: z.literal("media:producerPaused"),
+    roomId: z.string(),
+    peerId: z.string(),
+    producerId: z.string(),
+    kind: z.string(),
+    ts: z.number(),
+  }),
+  z.object({
+    type: z.literal("media:producerResumed"),
+    roomId: z.string(),
+    peerId: z.string(),
+    producerId: z.string(),
+    kind: z.string(),
+    ts: z.number(),
+  }),
 ]);
 
 export type RoomEvent = z.infer<typeof RoomEventSchema>;

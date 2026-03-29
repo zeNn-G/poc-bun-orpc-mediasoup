@@ -1,6 +1,6 @@
 import { publicProcedure } from "../index";
 import { env } from "@poc-bun-orpc-mediasoup/env/server";
-import { getOrCreateRouter, deleteRouter } from "../lib/mediasoup-worker";
+import { getOrCreateRouter, deleteRouter, getAudioLevelObserver } from "../lib/mediasoup-worker";
 import {
   getOrCreateMediaRoom,
   addPeerMedia,
@@ -9,6 +9,7 @@ import {
   cleanupMediaRoom,
   getMediaRoom,
   registerConnection,
+  findPeerIdByProducerId,
 } from "../lib/media-store";
 import { publisher } from "../lib/room-store";
 import {
@@ -20,14 +21,62 @@ import {
   ResumeConsumerInputSchema,
   CloseProducerInputSchema,
   MediaPeersInputSchema,
+  MuteProducerInputSchema,
 } from "../schemas/media";
+
+// Track which rooms already have audio level listeners attached
+const audioLevelListenersAttached = new Set<string>();
+
+function attachAudioLevelListeners(roomId: string): void {
+  if (audioLevelListenersAttached.has(roomId)) return;
+
+  const observer = getAudioLevelObserver(roomId);
+  if (!observer) return;
+
+  audioLevelListenersAttached.add(roomId);
+
+  observer.on("volumes", (volumes) => {
+    const levels: { peerId: string; volume: number }[] = [];
+    for (const v of volumes) {
+      // Skip screen share audio producers
+      if (v.producer.appData?.screen === true) continue;
+      const peerId = findPeerIdByProducerId(roomId, v.producer.id);
+      if (peerId) {
+        levels.push({ peerId, volume: v.volume });
+      }
+    }
+    publisher.publish(`room:${roomId}`, {
+      type: "media:audioLevels",
+      roomId,
+      levels,
+      ts: Date.now(),
+    });
+  });
+
+  observer.on("silence", () => {
+    publisher.publish(`room:${roomId}`, {
+      type: "media:audioLevels",
+      roomId,
+      levels: [],
+      ts: Date.now(),
+    });
+  });
+
+  // Clean up the tracking set when the observer closes
+  observer.observer.on("close", () => {
+    audioLevelListenersAttached.delete(roomId);
+  });
+}
 
 export const mediaRouter = {
   joinMedia: publicProcedure
     .input(JoinMediaInputSchema)
     .handler(async ({ input, context }) => {
-      const router = await getOrCreateRouter(input.roomId);
+      const { router } = await getOrCreateRouter(input.roomId);
       const room = getOrCreateMediaRoom(input.roomId, router);
+
+      // Attach audio level event listeners for this room
+      attachAudioLevelListeners(input.roomId);
 
       // Don't add duplicate peer
       if (!room.peers.has(input.peerId)) {
@@ -125,6 +174,14 @@ export const mediaRouter = {
 
       peer.producers.set(producer.id, producer);
 
+      // Add audio producers to the AudioLevelObserver
+      if (input.kind === "audio") {
+        const observer = getAudioLevelObserver(input.roomId);
+        if (observer) {
+          await observer.addProducer({ producerId: producer.id });
+        }
+      }
+
       await publisher.publish(`room:${input.roomId}`, {
         type: "media:newProducer",
         roomId: input.roomId,
@@ -215,6 +272,52 @@ export const mediaRouter = {
       });
 
       return { closed: true };
+    }),
+
+  muteProducer: publicProcedure
+    .input(MuteProducerInputSchema)
+    .handler(async ({ input }) => {
+      const peer = getPeerMedia(input.roomId, input.peerId);
+      if (!peer) throw new Error(`Peer ${input.peerId} not found`);
+
+      const producer = peer.producers.get(input.producerId);
+      if (!producer) throw new Error(`Producer ${input.producerId} not found`);
+
+      await producer.pause();
+
+      await publisher.publish(`room:${input.roomId}`, {
+        type: "media:producerPaused",
+        roomId: input.roomId,
+        peerId: input.peerId,
+        producerId: input.producerId,
+        kind: producer.kind,
+        ts: Date.now(),
+      });
+
+      return { paused: true };
+    }),
+
+  unmuteProducer: publicProcedure
+    .input(MuteProducerInputSchema)
+    .handler(async ({ input }) => {
+      const peer = getPeerMedia(input.roomId, input.peerId);
+      if (!peer) throw new Error(`Peer ${input.peerId} not found`);
+
+      const producer = peer.producers.get(input.producerId);
+      if (!producer) throw new Error(`Producer ${input.producerId} not found`);
+
+      await producer.resume();
+
+      await publisher.publish(`room:${input.roomId}`, {
+        type: "media:producerResumed",
+        roomId: input.roomId,
+        peerId: input.peerId,
+        producerId: input.producerId,
+        kind: producer.kind,
+        ts: Date.now(),
+      });
+
+      return { resumed: true };
     }),
 
   leaveMedia: publicProcedure

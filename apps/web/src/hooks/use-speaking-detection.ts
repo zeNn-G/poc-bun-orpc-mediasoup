@@ -1,111 +1,86 @@
 import { useEffect, useRef, useState } from "react";
 import { getAudioContext } from "@/lib/audio-context";
 
-interface AudioTrackInput {
-  peerId: string;
-  track: MediaStreamTrack;
-}
-
-interface AnalyserEntry {
-  source: MediaStreamAudioSourceNode;
-  analyser: AnalyserNode;
-}
-
 const THRESHOLD = 30;
 const DEBOUNCE_MS = 300;
 
 /**
- * Monitors audio tracks via Web Audio API AnalyserNode and reports
- * which peers are currently speaking.
+ * Monitors a single local audio track via Web Audio API AnalyserNode
+ * and reports whether the local user is currently speaking.
  *
- * Accepts both remote audio tracks and the local mic track.
- * Returns a Set of peerIds currently speaking.
+ * Returns a Set containing the local peerId if speaking, empty otherwise.
+ * Server-side audio level detection handles remote peers.
  */
-export function useSpeakingDetection(
-  audioTracks: Array<AudioTrackInput>,
+export function useLocalSpeakingDetection(
+  localAudioTrack: MediaStreamTrack | null,
+  peerId: string,
 ): Set<string> {
   const [speakingPeers, setSpeakingPeers] = useState<Set<string>>(
     () => new Set(),
   );
 
-  const nodesRef = useRef<Map<string, AnalyserEntry>>(new Map());
-  const lastSpokeAtRef = useRef<Map<string, number>>(new Map());
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const lastSpokeAtRef = useRef<number>(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // Clean up previous nodes
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+      analyserRef.current = null;
+    }
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (!localAudioTrack || !localAudioTrack.enabled) {
+      setSpeakingPeers(new Set());
+      return;
+    }
+
     const ctx = getAudioContext();
-    const currentNodes = nodesRef.current;
-    const incomingKeys = new Set<string>();
-
-    // Build set of incoming track keys and add new ones
-    for (const { peerId, track } of audioTracks) {
-      const key = `${peerId}:${track.id}`;
-      incomingKeys.add(key);
-
-      if (!currentNodes.has(key)) {
-        try {
-          const stream = new MediaStream([track]);
-          const source = ctx.createMediaStreamSource(stream);
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
-          // Connect source -> analyser only (dead-end, no destination)
-          source.connect(analyser);
-          currentNodes.set(key, { source, analyser });
-        } catch (e) {
-          console.warn("Failed to create analyser for track:", key, e);
-        }
-      }
+    try {
+      const stream = new MediaStream([localAudioTrack]);
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      sourceRef.current = source;
+      analyserRef.current = analyser;
+    } catch (e) {
+      console.warn("Failed to create analyser for local track:", e);
+      return;
     }
 
-    // Remove tracks that are no longer present
-    for (const [key, entry] of currentNodes) {
-      if (!incomingKeys.has(key)) {
-        entry.source.disconnect();
-        currentNodes.delete(key);
-        // Clean up lastSpokeAt for this key
-        lastSpokeAtRef.current.delete(key);
-      }
-    }
-
-    // Start polling loop
     const poll = () => {
+      const analyser = analyserRef.current;
+      if (!analyser) return;
+
       const now = Date.now();
-      const speaking = new Set<string>();
-      const lastSpoke = lastSpokeAtRef.current;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
 
-      for (const { peerId, track } of audioTracks) {
-        const key = `${peerId}:${track.id}`;
-        const entry = currentNodes.get(key);
-        if (!entry) continue;
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
 
-        const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
-        entry.analyser.getByteFrequencyData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        const average = sum / dataArray.length;
-
-        if (average > THRESHOLD) {
-          lastSpoke.set(key, now);
-          speaking.add(peerId);
-        } else {
-          const lastTime = lastSpoke.get(key) ?? 0;
-          if (now - lastTime < DEBOUNCE_MS) {
-            // Within debounce window, still considered speaking
-            speaking.add(peerId);
-          }
-        }
+      let isSpeaking = false;
+      if (average > THRESHOLD) {
+        lastSpokeAtRef.current = now;
+        isSpeaking = true;
+      } else if (now - lastSpokeAtRef.current < DEBOUNCE_MS) {
+        isSpeaking = true;
       }
 
-      // Only update state if the set actually changed
       setSpeakingPeers((prev) => {
-        if (prev.size !== speaking.size) return speaking;
-        for (const id of speaking) {
-          if (!prev.has(id)) return speaking;
-        }
-        return prev;
+        const wasSpeaking = prev.has(peerId);
+        if (isSpeaking === wasSpeaking) return prev;
+        return isSpeaking ? new Set([peerId]) : new Set();
       });
 
       rafRef.current = requestAnimationFrame(poll);
@@ -119,16 +94,16 @@ export function useSpeakingDetection(
         rafRef.current = null;
       }
     };
-  }, [audioTracks]);
+  }, [localAudioTrack, peerId]);
 
-  // Clean up all nodes on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      for (const entry of nodesRef.current.values()) {
-        entry.source.disconnect();
+      if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+        analyserRef.current = null;
       }
-      nodesRef.current.clear();
-      lastSpokeAtRef.current.clear();
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;

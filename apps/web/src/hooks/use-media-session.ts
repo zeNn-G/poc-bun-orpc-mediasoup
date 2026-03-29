@@ -29,6 +29,7 @@ interface RoomEvent {
   producerId?: string;
   kind?: string;
   appData?: Record<string, unknown>;
+  levels?: Array<{ peerId: string; volume: number }>;
 }
 
 export function useMediaSession(
@@ -43,6 +44,8 @@ export function useMediaSession(
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenProducerId, setScreenProducerId] = useState<string | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [speakingPeers, setSpeakingPeers] = useState<Set<string>>(new Set());
+  const [mutedPeers, setMutedPeers] = useState<Set<string>>(new Set());
 
   const sessionRef = useRef<MediaSession | null>(null);
   const audioProducerRef = useRef<string | null>(null);
@@ -140,14 +143,25 @@ export function useMediaSession(
     setIsInCall(false);
     setAudioEnabled(true);
     setVideoEnabled(true);
+    setSpeakingPeers(new Set());
+    setMutedPeers(new Set());
   }, [localStream, screenStream]);
 
-  const toggleAudio = useCallback(() => {
-    if (!localStream) return;
+  const toggleAudio = useCallback(async () => {
+    if (!localStream || !sessionRef.current || !audioProducerRef.current) return;
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setAudioEnabled(audioTrack.enabled);
+      try {
+        if (!audioTrack.enabled) {
+          await sessionRef.current.pauseProducer(audioProducerRef.current);
+        } else {
+          await sessionRef.current.resumeProducer(audioProducerRef.current);
+        }
+      } catch (e) {
+        console.error("Failed to sync mute state with server:", e);
+      }
     }
   }, [localStream]);
 
@@ -251,6 +265,23 @@ export function useMediaSession(
         setRemoteStreams((prev) =>
           prev.filter((s) => s.peerId !== event.peerId),
         );
+        setMutedPeers((prev) => {
+          const next = new Set(prev);
+          next.delete(event.peerId!);
+          return next;
+        });
+      } else if (event.type === "media:audioLevels") {
+        if (event.levels) {
+          setSpeakingPeers(new Set(event.levels.map((l) => l.peerId)));
+        }
+      } else if (event.type === "media:producerPaused" && event.kind === "audio") {
+        setMutedPeers((prev) => new Set([...prev, event.peerId!]));
+      } else if (event.type === "media:producerResumed" && event.kind === "audio") {
+        setMutedPeers((prev) => {
+          const next = new Set(prev);
+          next.delete(event.peerId!);
+          return next;
+        });
       }
     },
     [isInCall, peerId],
@@ -275,6 +306,8 @@ export function useMediaSession(
     localStream,
     screenProducerId,
     screenStream,
+    speakingPeers,
+    mutedPeers,
     joinCall,
     leaveCall,
     toggleAudio,

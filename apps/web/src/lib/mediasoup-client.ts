@@ -193,6 +193,22 @@ export class MediaSession {
     return { consumer, track: consumer.track };
   }
 
+  async pauseProducer(producerId: string) {
+    await this.wsClient.media.muteProducer({
+      roomId: this.roomId,
+      peerId: this.peerId,
+      producerId,
+    });
+  }
+
+  async resumeProducer(producerId: string) {
+    await this.wsClient.media.unmuteProducer({
+      roomId: this.roomId,
+      peerId: this.peerId,
+      producerId,
+    });
+  }
+
   async closeProducer(producerId: string) {
     const producer = this.producers.get(producerId);
     if (producer) {

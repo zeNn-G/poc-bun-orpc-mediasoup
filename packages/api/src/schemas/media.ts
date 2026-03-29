@@ -71,3 +71,9 @@ export const CloseProducerInputSchema = z.object({
 export const MediaPeersInputSchema = z.object({
   roomId: z.string().min(1),
 });
+
+export const MuteProducerInputSchema = z.object({
+  roomId: z.string().min(1),
+  peerId: z.string().min(1),
+  producerId: z.string().min(1),
+});
