@@ -9,6 +9,9 @@ import { useMediaSession, type ScreenQuality } from "@/hooks/use-media-session";
 import { VideoGrid } from "@/components/video-grid";
 import { MediaControls } from "@/components/media-controls";
 import { ScreenShareDialog } from "@/components/screen-share-dialog";
+import { ParticipantsSidebar } from "@/components/participants-sidebar";
+import { useVolumeSettings } from "@/hooks/use-volume-settings";
+import { useSpeakingDetection } from "@/hooks/use-speaking-detection";
 import {
   Hash,
   Users,
@@ -68,7 +71,13 @@ function MediaPlaygroundComponent() {
   return <RoomView username={username} onChangeUser={() => setUsernameSet(false)} />;
 }
 
-function RoomView({ username, onChangeUser }: { username: string; onChangeUser: () => void }) {
+function RoomView({
+  username,
+  onChangeUser,
+}: {
+  username: string;
+  onChangeUser: () => void;
+}) {
   const [roomId, setRoomId] = useState("general");
   const [joined, setJoined] = useState(false);
   const [members, setMembers] = useState<string[]>([]);
@@ -80,6 +89,7 @@ function RoomView({ username, onChangeUser }: { username: string; onChangeUser: 
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
+  const volumeSettings = useVolumeSettings();
 
   const { client: wsClient, websocket } = useMemo(() => createWsClient(), []);
   const [wsConnected, setWsConnected] = useState(false);
@@ -93,6 +103,25 @@ function RoomView({ username, onChangeUser }: { username: string; onChangeUser: 
   }, [websocket]);
 
   const media = useMediaSession(wsConnected ? wsClient : null, roomId, username);
+
+  // Build audio tracks for speaking detection (remote audio + local mic)
+  const audioTracksForDetection = useMemo(() => {
+    const tracks: Array<{ peerId: string; track: MediaStreamTrack }> = [];
+    // Remote mic audio only (exclude screen share audio)
+    for (const s of media.remoteStreams) {
+      if (s.kind === "audio" && !s.appData?.screen) {
+        tracks.push({ peerId: s.peerId, track: s.track });
+      }
+    }
+    // Local mic
+    const localAudioTrack = media.localStream?.getAudioTracks()[0];
+    if (localAudioTrack) {
+      tracks.push({ peerId: username, track: localAudioTrack });
+    }
+    return tracks;
+  }, [media.remoteStreams, media.localStream, username]);
+
+  const speakingPeers = useSpeakingDetection(audioTracksForDetection);
 
   const liveQuery = useQuery(
     orpc.room.live.experimental_liveOptions({
@@ -222,9 +251,9 @@ function RoomView({ username, onChangeUser }: { username: string; onChangeUser: 
       </div>
 
       {/* Full-bleed video area */}
-      <div className="flex-1">
-        {!media.isInCall ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
+      {!media.isInCall ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/50">
               <Phone className="h-6 w-6 text-muted-foreground" />
             </div>
@@ -236,15 +265,27 @@ function RoomView({ username, onChangeUser }: { username: string; onChangeUser: 
               Join Call
             </Button>
           </div>
-        ) : (
-          <VideoGrid
+        </div>
+      ) : (
+        <div className="flex flex-1">
+          <ParticipantsSidebar
+            localPeerId={username}
             remoteStreams={media.remoteStreams}
-            localStream={media.localStream}
-            screenStream={media.screenStream}
-            peerId={username}
+            isInCall={media.isInCall}
+            speakingPeers={speakingPeers}
+            volumeSettings={volumeSettings}
           />
-        )}
-      </div>
+          <div className="flex-1">
+            <VideoGrid
+              remoteStreams={media.remoteStreams}
+              localStream={media.localStream}
+              screenStream={media.screenStream}
+              peerId={username}
+              volumeSettings={volumeSettings}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Bottom controls — floating */}
       {media.isInCall && (

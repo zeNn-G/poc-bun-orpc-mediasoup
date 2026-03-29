@@ -1,33 +1,98 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Maximize, MonitorPlay, Eye, EyeOff, Volume2, VolumeOff } from "lucide-react";
+import { Maximize, MonitorPlay, Eye, EyeOff, Volume1, Volume2, VolumeOff } from "lucide-react";
 import { Button } from "@poc-bun-orpc-mediasoup/ui/components/button";
 import type { RemoteStream } from "@/hooks/use-media-session";
+import type { VolumeSettings } from "@/hooks/use-volume-settings";
+import { VolumeContextMenu } from "@/components/volume-context-menu";
+import { getAudioContext } from "@/lib/audio-context";
 
-function AudioTile({ track, muted }: { track: MediaStreamTrack; muted?: boolean }) {
+function AudioTile({
+  track,
+  volume,
+  muted,
+}: {
+  track: MediaStreamTrack;
+  volume: number; // 0-200
+  muted: boolean;
+}) {
   const ref = useRef<HTMLAudioElement>(null);
+  const boostRef = useRef<{
+    source: MediaStreamAudioSourceNode;
+    gain: GainNode;
+  } | null>(null);
 
+  // Effect 1: Track assignment
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.srcObject = new MediaStream([track]);
-    if (!muted) el.play().catch(() => {});
+    el.play().catch(() => {});
     return () => {
       el.pause();
       el.srcObject = null;
+      // Clean up boost nodes if they exist
+      if (boostRef.current) {
+        boostRef.current.source.disconnect();
+        boostRef.current.gain.disconnect();
+        boostRef.current = null;
+      }
     };
-  }, [track, muted]);
+  }, [track]);
 
-  return <audio ref={ref} autoPlay={!muted} muted={muted} playsInline />;
+  // Effect 2: Volume control
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    if (muted) {
+      el.volume = 0;
+      if (boostRef.current) boostRef.current.gain.gain.value = 0;
+      return;
+    }
+
+    if (volume <= 100) {
+      // Standard range: use native audio.volume, disable boost path
+      el.volume = volume / 100;
+      if (boostRef.current) boostRef.current.gain.gain.value = 0;
+    } else {
+      // Boost >100%: mute native element, use Web Audio GainNode
+      el.volume = 0;
+
+      // Lazily create the boost audio path (user has interacted with slider = gesture)
+      if (!boostRef.current) {
+        try {
+          const ctx = getAudioContext();
+          const source = ctx.createMediaStreamSource(new MediaStream([track]));
+          const gain = ctx.createGain();
+          source.connect(gain);
+          gain.connect(ctx.destination);
+          boostRef.current = { source, gain };
+        } catch (e) {
+          // Fallback: just play at max native volume
+          el.volume = 1;
+          return;
+        }
+      }
+
+      boostRef.current.gain.gain.value = volume / 100;
+    }
+  }, [volume, muted, track]);
+
+  return <audio ref={ref} autoPlay playsInline />;
 }
 
 function VideoTile({
   track,
   label,
   muted,
+  peerId,
+  volumeSettings,
 }: {
   track: MediaStreamTrack;
   label: string;
   muted?: boolean;
+  peerId?: string;
+  volumeSettings?: VolumeSettings;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -45,6 +110,9 @@ function VideoTile({
     containerRef.current?.requestFullscreen?.();
   }, []);
 
+  const settings = peerId && volumeSettings ? volumeSettings.getSettings(peerId) : null;
+  const showIndicator = settings && (settings.volume !== 100 || settings.muted);
+
   return (
     <div ref={containerRef} className="group relative h-full w-full overflow-hidden rounded-md bg-black/80">
       <video
@@ -55,7 +123,20 @@ function VideoTile({
         className="h-full w-full object-cover"
       />
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2.5 pb-1.5 pt-5">
-        <span className="text-[11px] font-medium text-white/90">{label}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] font-medium text-white/90">{label}</span>
+          {showIndicator && (
+            <span className="text-white/70">
+              {settings.muted ? (
+                <VolumeOff className="h-3 w-3" />
+              ) : settings.volume < 100 ? (
+                <Volume1 className="h-3 w-3" />
+              ) : (
+                <Volume2 className="h-3 w-3" />
+              )}
+            </span>
+          )}
+        </div>
       </div>
       <button
         onClick={goFullscreen}
@@ -71,16 +152,21 @@ function ScreenShareViewer({
   videoTrack,
   audioTrack,
   isLocal,
+  peerId,
+  volumeSettings,
   onClose,
 }: {
   videoTrack: MediaStreamTrack;
   audioTrack?: MediaStreamTrack;
   isLocal: boolean;
+  peerId: string;
+  volumeSettings: VolumeSettings;
   onClose: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [audioMuted, setAudioMuted] = useState(true);
+
+  const settings = volumeSettings.getSettings(peerId);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -95,7 +181,7 @@ function ScreenShareViewer({
     containerRef.current?.requestFullscreen?.();
   }, []);
 
-  return (
+  const content = (
     <div ref={containerRef} className="absolute inset-0 z-10 flex items-center justify-center bg-black">
       <video
         ref={videoRef}
@@ -106,12 +192,12 @@ function ScreenShareViewer({
       />
       {/* Top controls */}
       <div className="absolute top-3 right-3 flex items-center gap-1">
-        {audioTrack && (
+        {audioTrack && !isLocal && (
           <button
-            onClick={() => setAudioMuted(!audioMuted)}
+            onClick={() => volumeSettings.setMuted(peerId, !settings.muted)}
             className="rounded-md bg-black/50 p-1.5 text-white/70 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
           >
-            {audioMuted ? <VolumeOff className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            {settings.muted ? <VolumeOff className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </button>
         )}
         <button
@@ -127,8 +213,22 @@ function ScreenShareViewer({
           <EyeOff className="h-4 w-4" />
         </button>
       </div>
-      {audioTrack && <AudioTile track={audioTrack} muted={audioMuted} />}
+      {audioTrack && (
+        <AudioTile
+          track={audioTrack}
+          volume={settings.volume}
+          muted={settings.muted}
+        />
+      )}
     </div>
+  );
+
+  if (isLocal) return content;
+
+  return (
+    <VolumeContextMenu peerId={peerId} volumeSettings={volumeSettings}>
+      {content}
+    </VolumeContextMenu>
   );
 }
 
@@ -145,12 +245,15 @@ export function VideoGrid({
   localStream,
   screenStream,
   peerId,
+  volumeSettings,
 }: {
   remoteStreams: RemoteStream[];
   localStream: MediaStream | null;
   screenStream: MediaStream | null;
   peerId: string;
+  volumeSettings: VolumeSettings;
 }) {
+
   const localVideoTrack = localStream?.getVideoTracks()[0];
   const screenPreviewTrack = screenStream?.getVideoTracks()[0];
 
@@ -188,7 +291,14 @@ export function VideoGrid({
             style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: "1fr" }}
           >
             {remoteCameras.map((s) => (
-              <VideoTile key={s.producerId} track={s.track} label={s.peerId} />
+              <VolumeContextMenu key={s.producerId} peerId={s.peerId} volumeSettings={volumeSettings}>
+                <VideoTile
+                  track={s.track}
+                  label={s.peerId}
+                  peerId={s.peerId}
+                  volumeSettings={volumeSettings}
+                />
+              </VolumeContextMenu>
             ))}
             {localVideoTrack && (
               <VideoTile track={localVideoTrack} label={`${peerId} (you)`} muted />
@@ -232,15 +342,25 @@ export function VideoGrid({
             videoTrack={activeShare.videoTrack}
             audioTrack={activeShare.audioTrack}
             isLocal={activeShare.isLocal}
+            peerId={activeShare.peerId}
+            volumeSettings={volumeSettings}
             onClose={() => setWatchingId(null)}
           />
         )}
       </div>
 
       {/* Mic audio — always plays */}
-      {audioStreams.map((s) => (
-        <AudioTile key={s.producerId} track={s.track} />
-      ))}
+      {audioStreams.map((s) => {
+        const settings = volumeSettings.getSettings(s.peerId);
+        return (
+          <AudioTile
+            key={s.producerId}
+            track={s.track}
+            volume={settings.volume}
+            muted={settings.muted}
+          />
+        );
+      })}
     </div>
   );
 }
