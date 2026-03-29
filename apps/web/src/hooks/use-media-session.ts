@@ -185,7 +185,7 @@ export function useMediaSession(
       // Produce audio track (system/tab audio)
       const screenAudioTrack = displayStream.getAudioTracks()[0];
       if (screenAudioTrack && sessionRef.current) {
-        await sessionRef.current.produceAudio(screenAudioTrack);
+        await sessionRef.current.produceAudio(screenAudioTrack, { screen: true });
       }
     } catch (e) {
       console.error("Screen share failed:", e);

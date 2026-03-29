@@ -136,9 +136,9 @@ export class MediaSession {
     );
   }
 
-  async produceAudio(track: MediaStreamTrack): Promise<Producer> {
+  async produceAudio(track: MediaStreamTrack, appData?: Record<string, unknown>): Promise<Producer> {
     if (!this.sendTransport) throw new Error("Send transport not ready");
-    const producer = await this.sendTransport.produce({ track });
+    const producer = await this.sendTransport.produce({ track, appData });
     this.producers.set(producer.id, producer);
     return producer;
   }

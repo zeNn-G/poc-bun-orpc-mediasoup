@@ -113,13 +113,13 @@ function RoomView({
         tracks.push({ peerId: s.peerId, track: s.track });
       }
     }
-    // Local mic
+    // Local mic (only when enabled)
     const localAudioTrack = media.localStream?.getAudioTracks()[0];
-    if (localAudioTrack) {
+    if (localAudioTrack && media.audioEnabled) {
       tracks.push({ peerId: username, track: localAudioTrack });
     }
     return tracks;
-  }, [media.remoteStreams, media.localStream, username]);
+  }, [media.remoteStreams, media.localStream, media.audioEnabled, username]);
 
   const speakingPeers = useSpeakingDetection(audioTracksForDetection);
 
